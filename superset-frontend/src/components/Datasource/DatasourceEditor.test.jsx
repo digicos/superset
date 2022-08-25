@@ -39,7 +39,12 @@ describe('DatasourceEditor', () => {
   let isFeatureEnabledMock;
 
   beforeEach(() => {
-    el = <DatasourceEditor {...props} />;
+    el = (
+      <DatasourceEditor
+        {...props}
+        datasource={{ ...props.datasource, table_name: 'Vehicle Sales +' }}
+      />
+    );
     render(el, { useRedux: true });
   });
 
@@ -51,7 +56,7 @@ describe('DatasourceEditor', () => {
     expect(screen.getByTestId('edit-dataset-tabs')).toBeInTheDocument();
   });
 
-  it('makes an async request', () =>
+  it('can sync columns from source', () =>
     new Promise(done => {
       const columnsTab = screen.getByTestId('collection-tab-Columns');
 
@@ -63,6 +68,9 @@ describe('DatasourceEditor', () => {
 
       setTimeout(() => {
         expect(fetchMock.calls(DATASOURCE_ENDPOINT)).toHaveLength(1);
+        expect(fetchMock.calls(DATASOURCE_ENDPOINT)[0][0]).toContain(
+          'Vehicle%20Sales%20%2B%27',
+        );
         fetchMock.reset();
         done();
       }, 0);
@@ -88,7 +96,7 @@ describe('DatasourceEditor', () => {
       'Certification details',
     );
 
-    userEvent.type(await inputLabel, 'test_lable');
+    userEvent.type(await inputLabel, 'test_label');
     userEvent.type(await inputDescription, 'test');
     userEvent.type(await inputDtmFormat, 'test');
     userEvent.type(await inputCertifiedBy, 'test');
@@ -157,11 +165,11 @@ describe('DatasourceEditor', () => {
       const physicalRadioBtn = screen.getByRole('radio', {
         name: /physical \(table or view\)/i,
       });
-      const vituralRadioBtn = screen.getByRole('radio', {
+      const virtualRadioBtn = screen.getByRole('radio', {
         name: /virtual \(sql\)/i,
       });
       expect(physicalRadioBtn).toBeEnabled();
-      expect(vituralRadioBtn).toBeEnabled();
+      expect(virtualRadioBtn).toBeEnabled();
     });
 
     it('Source Tab: readOnly mode', () => {
@@ -170,11 +178,11 @@ describe('DatasourceEditor', () => {
       const physicalRadioBtn = screen.getByRole('radio', {
         name: /physical \(table or view\)/i,
       });
-      const vituralRadioBtn = screen.getByRole('radio', {
+      const virtualRadioBtn = screen.getByRole('radio', {
         name: /virtual \(sql\)/i,
       });
       expect(physicalRadioBtn).toBeDisabled();
-      expect(vituralRadioBtn).toBeDisabled();
+      expect(virtualRadioBtn).toBeDisabled();
     });
   });
 

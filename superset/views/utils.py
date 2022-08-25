@@ -15,9 +15,8 @@
 # specific language governing permissions and limitations
 # under the License.
 import logging
-from collections import defaultdict
 from functools import wraps
-from typing import Any, Callable, DefaultDict, Dict, List, Optional, Set, Tuple, Union
+from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 from urllib import parse
 
 import msgpack
@@ -32,7 +31,7 @@ from sqlalchemy.orm.exc import NoResultFound
 import superset.models.core as models
 from superset import app, dataframe, db, result_set, viz
 from superset.common.db_query_status import QueryStatus
-from superset.connectors.connector_registry import ConnectorRegistry
+from superset.datasource.dao import DatasourceDAO
 from superset.errors import ErrorLevel, SupersetError, SupersetErrorType
 from superset.exceptions import (
     CacheLoadError,
@@ -40,13 +39,14 @@ from superset.exceptions import (
     SupersetException,
     SupersetSecurityException,
 )
-from superset.extensions import cache_manager, security_manager
+from superset.extensions import cache_manager, feature_flag_manager, security_manager
 from superset.legacy import update_time_range
 from superset.models.core import Database
 from superset.models.dashboard import Dashboard
 from superset.models.slice import Slice
 from superset.models.sql_lab import Query
-from superset.typing import FormData
+from superset.superset_typing import FormData
+from superset.utils.core import DatasourceType
 from superset.utils.decorators import stats_timing
 from superset.viz import BaseViz
 
@@ -55,7 +55,7 @@ stats_logger = app.config["STATS_LOGGER"]
 
 
 REJECTED_FORM_DATA_KEYS: List[str] = []
-if not app.config["ENABLE_JAVASCRIPT_CONTROLS"]:
+if not feature_flag_manager.is_feature_enabled("ENABLE_JAVASCRIPT_CONTROLS"):
     REJECTED_FORM_DATA_KEYS = ["js_tooltip", "js_onclick_href", "js_data_mutator"]
 
 
@@ -72,6 +72,14 @@ def bootstrap_user_data(user: User, include_perms: bool = False) -> Dict[str, An
     if user.is_anonymous:
         payload = {}
         user.roles = (security_manager.find_role("Public"),)
+    elif security_manager.is_guest_user(user):
+        payload = {
+            "username": user.username,
+            "firstName": user.first_name,
+            "lastName": user.last_name,
+            "isActive": user.is_active,
+            "isAnonymous": user.is_anonymous,
+        }
     else:
         payload = {
             "username": user.username,
@@ -85,30 +93,11 @@ def bootstrap_user_data(user: User, include_perms: bool = False) -> Dict[str, An
         }
 
     if include_perms:
-        roles, permissions = get_permissions(user)
+        roles, permissions = security_manager.get_permissions(user)
         payload["roles"] = roles
         payload["permissions"] = permissions
 
     return payload
-
-
-def get_permissions(
-    user: User,
-) -> Tuple[Dict[str, List[List[str]]], DefaultDict[str, Set[str]]]:
-    if not user.roles:
-        raise AttributeError("User object does not have roles")
-
-    roles = defaultdict(list)
-    permissions = defaultdict(set)
-
-    for role in user.roles:
-        permissions_ = security_manager.get_role_permissions(role)
-        for permission in permissions_:
-            if permission[0] in ("datasource_access", "database_access"):
-                permissions[permission[0]].add(permission[1])
-            roles[role.name].append([permission[0], permission[1]])
-
-    return roles, permissions
 
 
 def get_viz(
@@ -119,8 +108,10 @@ def get_viz(
     force_cached: bool = False,
 ) -> BaseViz:
     viz_type = form_data.get("viz_type", "table")
-    datasource = ConnectorRegistry.get_datasource(
-        datasource_type, datasource_id, db.session
+    datasource = DatasourceDAO.get_datasource(
+        db.session,
+        DatasourceType(datasource_type),
+        datasource_id,
     )
     viz_obj = viz.viz_types[viz_type](
         datasource, form_data=form_data, force=force, force_cached=force_cached
@@ -279,6 +270,7 @@ def apply_display_max_row_limit(
     metadata.
 
     :param sql_results: The results of a sql query from sql_lab.get_sql_results
+    :param rows: The number of rows to apply a limit to
     :returns: The mutated sql_results structure
     """
 
@@ -412,12 +404,9 @@ def is_slice_in_container(
     return False
 
 
-def is_owner(obj: Union[Dashboard, Slice], user: User) -> bool:
-    """Check if user is owner of the slice"""
-    return obj and user in obj.owners
-
-
-def check_resource_permissions(check_perms: Callable[..., Any],) -> Callable[..., Any]:
+def check_resource_permissions(
+    check_perms: Callable[..., Any],
+) -> Callable[..., Any]:
     """
     A decorator for checking permissions on a request using the passed-in function.
     """

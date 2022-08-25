@@ -22,6 +22,7 @@ import { Provider } from 'react-redux';
 import thunkMiddleware from 'redux-thunk';
 import { hot } from 'react-hot-loader/root';
 import { ThemeProvider } from '@superset-ui/core';
+import { GlobalStyles } from 'src/GlobalStyles';
 import {
   initFeatureFlags,
   isFeatureEnabled,
@@ -40,7 +41,6 @@ import setupApp from '../setup/setupApp';
 
 import './main.less';
 import '../assets/stylesheets/reactable-pagination.less';
-import '../components/FilterableTable/FilterableTableStyles.less';
 import { theme } from '../preamble';
 
 setupApp();
@@ -67,6 +67,9 @@ const sqlLabPersistStateConfig = {
             ...state[path],
             queries: emptyQueryResults(state[path].queries),
             queryEditors: clearQueryEditors(state[path].queryEditors),
+            unsavedQueryEditor: clearQueryEditors([
+              state[path].unsavedQueryEditor,
+            ])[0],
           };
         }
       });
@@ -91,6 +94,12 @@ const sqlLabPersistStateConfig = {
       const result = {
         ...initialState,
         ...persistedState,
+        sqlLab: {
+          ...(persistedState?.sqlLab || {}),
+          // Overwrite initialState over persistedState for sqlLab
+          // since a logic in getInitialState overrides the value from persistedState
+          ...initialState.sqlLab,
+        },
       };
       // Filter out any user data that may have been persisted in an older version.
       // Get user from bootstrap data instead, every time
@@ -127,6 +136,7 @@ if (sqlLabMenu) {
 const Application = () => (
   <Provider store={store}>
     <ThemeProvider theme={theme}>
+      <GlobalStyles />
       <App />
     </ThemeProvider>
   </Provider>

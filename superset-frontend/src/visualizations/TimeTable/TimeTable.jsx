@@ -31,7 +31,6 @@ import sortNumericValues from 'src/utils/sortNumericValues';
 
 import FormattedNumber from './FormattedNumber';
 import SparklineCell from './SparklineCell';
-import './TimeTable.less';
 
 const ACCESSIBLE_COLOR_BOUNDS = ['#ca0020', '#0571b0'];
 
@@ -99,11 +98,13 @@ const defaultProps = {
   url: '',
 };
 
+// @z-index-above-dashboard-charts + 1 = 11
 const TimeTableStyles = styled.div`
   height: ${props => props.height}px;
+  overflow: auto;
 
   th {
-    z-index: 1; // to cover sparkline
+    z-index: 11 !important; // to cover sparkline
   }
 `;
 
@@ -241,10 +242,10 @@ const TimeTable = ({
         <span
           key={column.key}
           data-value={v}
-          style={
+          css={theme =>
             color && {
               boxShadow: `inset 0px -2.5px 0px 0px ${color}`,
-              borderRight: '2px solid #fff',
+              borderRight: `2px solid ${theme.colors.grayscale.light5}`,
             }
           }
         >
@@ -325,7 +326,11 @@ const TimeTable = ({
       : [];
 
   return (
-    <TimeTableStyles className={`time-table ${className}`} height={height}>
+    <TimeTableStyles
+      data-test="time-table"
+      className={className}
+      height={height}
+    >
       <TableView
         className="table-no-hover"
         columns={memoizedColumns}

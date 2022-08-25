@@ -20,7 +20,7 @@
 // eslint-disable-next-line import/no-extraneous-dependencies
 import * as ace from 'brace';
 import * as shortid from 'shortid';
-import { WORLD_HEALTH_DASHBOARD } from './dashboard.helper';
+import { USA_BIRTH_NAMES_DASHBOARD } from './dashboard.helper';
 
 function selectColorScheme(color: string) {
   // open color scheme dropdown
@@ -48,12 +48,11 @@ function assertMetadata(text: string) {
       expect(ace.edit(metadata).getValue()).to.match(regex);
     });
 }
-
-function typeMetadata(text: string) {
-  cy.get('.ant-modal-body')
-    .find('#json_metadata')
-    .should('be.visible')
-    .type(text);
+function clear(input: string) {
+  cy.get(input).type('{selectall}{backspace}');
+}
+function type(input: string, text: string) {
+  cy.get(input).type(text, { parseSpecialCharSequences: false });
 }
 
 function openAdvancedProperties() {
@@ -66,21 +65,25 @@ function openAdvancedProperties() {
 
 function openDashboardEditProperties() {
   // open dashboard properties edit modal
-  cy.get('#save-dash-split-button').trigger('click', { force: true });
+  cy.get(
+    '.header-with-actions .right-button-panel .ant-dropdown-trigger',
+  ).trigger('click', {
+    force: true,
+  });
   cy.get('[data-test=header-actions-menu]')
-    .contains('Edit dashboard properties')
+    .contains('Edit properties')
     .click({ force: true });
 }
 
 describe('Dashboard edit action', () => {
   beforeEach(() => {
     cy.login();
-    cy.visit(WORLD_HEALTH_DASHBOARD);
-    cy.intercept(`/api/v1/dashboard/1`).as('dashboardGet');
+    cy.visit(USA_BIRTH_NAMES_DASHBOARD);
+    cy.intercept(`/api/v1/dashboard/births`).as('dashboardGet');
     cy.get('.dashboard-grid', { timeout: 50000 })
       .should('be.visible') // wait for 50 secs to load dashboard
       .then(() => {
-        cy.get('.dashboard-header [aria-label=edit-alt]')
+        cy.get('.header-with-actions [aria-label="Edit dashboard"]')
           .should('be.visible')
           .click();
         openDashboardEditProperties();
@@ -103,49 +106,44 @@ describe('Dashboard edit action', () => {
       .click()
       .then(() => {
         // assert that modal edit window has closed
-        cy.get('.ant-modal-body').should('not.be.visible');
+        cy.get('.ant-modal-body').should('not.exist');
 
         // assert title has been updated
-        cy.get('.editable-title input').should('have.value', dashboardTitle);
+        cy.get('[data-test="editable-title-input"]').should(
+          'have.value',
+          dashboardTitle,
+        );
       });
   });
   describe('the color picker is changed', () => {
     describe('the metadata has a color scheme', () => {
       describe('the advanced tab is open', () => {
-        // TODO test passes locally but not on ci
-        xit('should overwrite the color scheme', () => {
+        it('should overwrite the color scheme', () => {
           openAdvancedProperties();
-          cy.wait('@dashboardGet').then(() => {
-            selectColorScheme('d3Category20b');
-            assertMetadata('d3Category20b');
-          });
+          selectColorScheme('d3Category20b');
+          assertMetadata('d3Category20b');
         });
       });
       describe('the advanced tab is not open', () => {
-        // TODO test passes locally but not on ci
-        xit('should overwrite the color scheme', () => {
+        it('should overwrite the color scheme', () => {
           selectColorScheme('bnbColors');
           openAdvancedProperties();
-          cy.wait('@dashboardGet').then(() => {
-            assertMetadata('bnbColors');
-          });
+          assertMetadata('bnbColors');
         });
       });
     });
   });
   describe('a valid colorScheme is entered', () => {
-    // TODO test passes locally but not on ci
-    xit('should save json metadata color change to dropdown', () => {
+    it('should save json metadata color change to dropdown', () => {
       // edit json metadata
       openAdvancedProperties().then(() => {
-        typeMetadata(
-          '{selectall}{backspace}{{}"color_scheme":"d3Category20"{}}',
-        );
+        clear('#json_metadata');
+        type('#json_metadata', '{"color_scheme":"d3Category20"}');
       });
 
       // save edit changes
-      cy.get('.modal-footer')
-        .contains('Save')
+      cy.get('.ant-modal-footer')
+        .contains('Apply')
         .click()
         .then(() => {
           // assert that modal edit window has closed
@@ -156,7 +154,7 @@ describe('Dashboard edit action', () => {
           openAdvancedProperties().then(() => {
             assertMetadata('d3Category20');
           });
-          cy.get('.color-scheme-container').should(
+          cy.get('.ant-select-selection-item .color-scheme-option').should(
             'have.attr',
             'data-test',
             'd3Category20',
@@ -165,18 +163,16 @@ describe('Dashboard edit action', () => {
     });
   });
   describe('an invalid colorScheme is entered', () => {
-    // TODO test passes locally but not on ci
-    xit('should throw an error', () => {
+    it('should throw an error', () => {
       // edit json metadata
       openAdvancedProperties().then(() => {
-        typeMetadata(
-          '{selectall}{backspace}{{}"color_scheme":"THIS_DOES_NOT_WORK"{}}',
-        );
+        clear('#json_metadata');
+        type('#json_metadata', '{"color_scheme":"THIS_DOES_NOT_WORK"}');
       });
 
       // save edit changes
-      cy.get('.modal-footer')
-        .contains('Save')
+      cy.get('.ant-modal-footer')
+        .contains('Apply')
         .click()
         .then(() => {
           // assert that modal edit window has closed
@@ -192,6 +188,76 @@ describe('Dashboard edit action', () => {
         // failing this test
         return false;
       });
+    });
+  });
+  describe('the color scheme affects the chart colors', () => {
+    it('should change the chart colors', () => {
+      openAdvancedProperties().then(() => {
+        clear('#json_metadata');
+        type(
+          '#json_metadata',
+          '{"color_scheme":"lyftColors", "label_colors": {}}',
+        );
+      });
+
+      cy.get('.ant-modal-footer')
+        .contains('Apply')
+        .click()
+        .then(() => {
+          cy.get('.ant-modal-body').should('not.exist');
+          // assert that the chart has changed colors
+          cy.get('.line .nv-legend-symbol')
+            .first()
+            .should('have.css', 'fill', 'rgb(117, 96, 170)');
+        });
+    });
+    it('the label colors should take precedence over the scheme', () => {
+      openAdvancedProperties().then(() => {
+        clear('#json_metadata');
+        type(
+          '#json_metadata',
+          '{"color_scheme":"lyftColors","label_colors":{"Amanda":"red"}}',
+        );
+      });
+
+      cy.get('.ant-modal-footer')
+        .contains('Apply')
+        .click()
+        .then(() => {
+          cy.get('.ant-modal-body').should('not.exist');
+          // assert that the chart has changed colors
+          cy.get('.line .nv-legend-symbol')
+            .first()
+            .should('have.css', 'fill', 'rgb(255, 0, 0)');
+        });
+    });
+    it('the shared label colors and label colors are applied correctly', () => {
+      openAdvancedProperties().then(() => {
+        clear('#json_metadata');
+        type(
+          '#json_metadata',
+          '{"color_scheme":"lyftColors","label_colors":{"Amanda":"red"}}',
+        );
+      });
+
+      cy.get('.ant-modal-footer')
+        .contains('Apply')
+        .click()
+        .then(() => {
+          cy.get('.ant-modal-body').should('not.exist');
+          // assert that the chart has changed colors
+          cy.get('.line .nv-legend-symbol')
+            .first()
+            .should('have.css', 'fill', 'rgb(255, 0, 0)'); // label: amanda
+          cy.get('.line .nv-legend-symbol')
+            .eq(11)
+            .should('have.css', 'fill', 'rgb(234, 11, 140)'); // label: jennifer
+          cy.get('.word_cloud')
+            .first()
+            .find('svg text')
+            .first()
+            .should('have.css', 'fill', 'rgb(234, 11, 140)'); // label: jennifer
+        });
     });
   });
 });

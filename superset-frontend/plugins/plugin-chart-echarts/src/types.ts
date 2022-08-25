@@ -18,12 +18,15 @@
  */
 import {
   DataRecordValue,
+  HandlerFunction,
   QueryFormColumn,
+  QueryObjectFilterClause,
   SetDataMaskHook,
 } from '@superset-ui/core';
 import { EChartsCoreOption, ECharts } from 'echarts';
 import { TooltipMarker } from 'echarts/types/src/util/format';
 import { OptionName } from 'echarts/types/src/util/types';
+import { AreaChartExtraControlsValue } from './constants';
 
 export type EchartsStylesProps = {
   height: number;
@@ -83,13 +86,6 @@ export type EchartsLegendFormData = {
   showLegend: boolean;
 };
 
-export const DEFAULT_LEGEND_FORM_DATA: EchartsLegendFormData = {
-  legendMargin: null,
-  legendOrientation: LegendOrientation.Top,
-  legendType: LegendType.Scroll,
-  showLegend: false,
-};
-
 export type EventHandlers = Record<string, { (props: any): void }>;
 
 export enum LabelPositionEnum {
@@ -115,10 +111,16 @@ export interface EChartTransformedProps<F> {
   echartOptions: EChartsCoreOption;
   emitFilter: boolean;
   setDataMask: SetDataMaskHook;
+  setControlValue?: HandlerFunction;
   labelMap: Record<string, DataRecordValue[]>;
   groupby: QueryFormColumn[];
   selectedValues: Record<number, string>;
   legendData?: OptionName[];
+  onContextMenu?: (
+    filters: QueryObjectFilterClause[],
+    offsetX: number,
+    offsetY: number,
+  ) => void;
 }
 
 export interface EchartsTitleFormData {
@@ -129,12 +131,8 @@ export interface EchartsTitleFormData {
   yAxisTitlePosition: string;
 }
 
-export const DEFAULT_TITLE_FORM_DATA: EchartsTitleFormData = {
-  xAxisTitle: '',
-  xAxisTitleMargin: 0,
-  yAxisTitle: '',
-  yAxisTitleMargin: 0,
-  yAxisTitlePosition: 'Top',
-};
+export type StackType = boolean | null | Partial<AreaChartExtraControlsValue>;
+
+export type AxisType = 'time' | 'value' | 'category';
 
 export * from './Timeseries/types';
